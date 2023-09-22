@@ -1,0 +1,131 @@
+---
+# С помощью CLI подключаем второй диск (с помощью Терраформ на этапе создания ВМ это сделать оказалось нельзя) 
+- name: try attach second disk
+  block:
+    - name: attach second disk
+      shell: yc compute instance attach-disk task1 --disk-name storage1 --mode rw
+      become_user: andrej
+      delegate_to: localhost
+  rescue:
+    - name: Message "disk was attached early"
+      debug:
+        msg: "disk was attached early"
+
+# С помощью CLI подключаем третий диск
+- name: attach third disk
+  block:
+    - name: attach third disk
+      shell: yc compute instance attach-disk task1 --disk-name storage2 --mode rw
+      become_user: andrej
+      delegate_to: localhost
+  rescue:
+    - name: Message "disk was attached early"
+      debug:
+        msg: "disk was attached early"  
+
+# С помощью CLI подключаем четвертый диск
+- name: attach fourth disk
+  block:
+    - name: attach fourth disk
+      shell: yc compute instance attach-disk task1 --disk-name storage3 --mode rw
+      become_user: andrej
+      delegate_to: localhost
+  rescue:
+    - name: Message "disk was attached early"
+      debug:
+        msg: "disk was attached early"  
+
+# С помощью CLI подключаем пятый диск
+- name: attach fifth disk
+  block:
+    - name: attach fifth disk
+      shell: yc compute instance attach-disk task1 --disk-name storage4 --mode rw
+      become_user: andrej
+      delegate_to: localhost
+  rescue:
+    - name: Message "disk was attached early"
+      debug:
+        msg: "disk was attached early"  
+
+# С помощью CLI подключаем пятый диск
+- name: attach sixth disk
+  block:
+    - name: attach sixth disk
+      shell: yc compute instance attach-disk task1 --disk-name storage5 --mode rw
+      become_user: andrej
+      delegate_to: localhost
+  rescue:
+    - name: Message "disk was attached early"
+      debug:
+        msg: "disk was attached early"  
+
+# Пробуем создать массив. Надо бы сначала проверить, есть ли он, создавать только если есть, но сделаю через block-rescue
+- name: try create raid10
+  block:
+    - name: create raid10
+      shell: "yes | mdadm --create /dev/md0 -l 10 -n 4 /dev/vdb /dev/vdc /dev/vdd /dev/vde"
+  rescue:
+    - name: Message "raid was created early"
+      debug:
+        msg: "raid was created early"  
+
+# Создаём файловую систему через filesystem дабы избежать "зашеливания" плейбука, и так уже везде этот shell, который ещё и надо пасти, чтобы корректно отображались результаты "changed" и "ok"
+- name: make fs on md0
+  filesystem: 
+    fstype: ext4
+    dev: /dev/md0
+
+# Монтируем массив
+- name: mount md0
+  mount: 
+    path: /mnt/md0
+    src: /dev/md0
+    state: mounted
+    fstype: ext4
+
+# Пишем строчку в файлик на массиве
+- name: Write file content
+  shell: echo "Hello from raid10!" > /mnt/md0/file
+
+# Помечаем один из дисков сбойным и вынимаем его
+- name: try create raid10
+  shell: "mdadm --manage /dev/md0 --fail /dev/vdb && mdadm --manage /dev/md0 --remove /dev/vdb"
+
+# Добавляем диск обратно. Надо бы другой, но в ЯО есть ограничение на число дисков. 
+- name: try rebuild raid10
+  shell: "mdadm --manage /dev/md0 --add /dev/vdf "
+
+# Ждём минуту пока массив пересоберётся
+- name: Pause for 1 minut
+  pause:
+    minutes: 1
+
+# Получим сведения об дисках 
+- name: Get disk information
+  shell: lsblk
+  register: disk_info
+
+# Выведем сведения об дисках 
+- name: Print disk information
+  debug:
+    var: disk_info.stdout
+
+# Получим сведения о массиве 
+- name: Get raid information
+  shell: mdadm -D /dev/md0
+  register: raid_info
+
+# Выведем сведения об массиве 
+- name: Print disk information
+  debug:
+    var: raid_info.stdout
+
+# Читаем содержимое файлика
+- name: Read file content
+  shell: cat /mnt/md0/file
+  register: file_content
+
+# И выводим это содержимое
+- name: Show file content
+  debug:
+    var: file_content.stdout

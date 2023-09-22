@@ -1,0 +1,7 @@
+{
+  "external_ip_address_task1_wan_yandex_cloud": {
+    "sensitive": false,
+    "type": "string",
+    "value": "158.160.117.124"
+  }
+}
